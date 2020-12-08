@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 
 # Run specific paths
-while getopts ":B:O:" opt; do
+while getopts ":B:O:S:" opt; do
   case $opt in
     B) inputbams="$OPTARG"
     ;;
     O) outputfolder="$OPTARG"
+    ;;
+    S) speciesarg="$OPTARG"
     ;;
     \?) echo "Invalid option -$OPTARG" >&2
     ;;
@@ -25,16 +27,30 @@ fi
 
 
 
-# Farm 5 Paths for human
-chr_list='1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,X'
+if [ "$speciesarg" == "human" ]; then
+	# Farm 5 Paths for human
+	mappableBinsDir="/lustre/scratch117/casm/team176/sl31/scCNV_mappability/mappability_files_organized/human/GRCh37d5/1Mb"
 
-#mappableBinsDir="/lustre/scratch117/casm/team176/sl31/scCNV/mappability"
+	chr_list='1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,X'
+	codedir="/lustre/scratch119/realdata/mdt1/team176/sl31/sccnv_seans_upgrades/scCNV/"
+	badbins_path="/lustre/scratch119/casm/team78pipelines/reference/human/GRCh37d5/scCNV/bad_bins.bed.gz"
+	cytoband_path="/lustre/scratch119/realdata/mdt1/team78pipelines/canpipe/live/ref/Homo_sapiens/GRCH37d5/brass/cytoband_hg19.txt"
+
+elif [ "$speciesarg" == "mouse" ]; then
+	# Farm 5 Paths for mouse
+	mappableBinsDir="/lustre/scratch117/casm/team176/sl31/scCNV_mappability/mappability_files_organized/mouse/GRCm38/100kb"
+
+	chr_list='1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19'
+	cytoband_path="/nfs/cancer_ref02/Mus_musculus/GRCm38/brass/cytoband.txt"
+	badbins_path="/nfs/cancer_ref02/Mus_musculus/GRCm38/scCNV/bad_bins.bed.gz"
+else
+	echo "Unsupported species, please manually add to wrapper script"
+	exit 1
+fi
+
+
 codedir="/lustre/scratch119/realdata/mdt1/team176/sl31/sccnv_seans_upgrades/scCNV/"
-mappableBinsDir="/lustre/scratch117/casm/team176/sl31/scCNV_mappability/mappability_files_organized/human/GRCh37d5/1MB"
-badbinsdir="/lustre/scratch119/casm/team78pipelines/canpipe/live/ref/human/GRCh37d5/scCNV/"
 sccnv_singularity_image="/software/CASM/singularity/sccnv/sccnv_v2.0.0.sif"
-
-
 
 if [[ ! $(tree "$inputbams" | grep ".bai$") ]]; then
 	cd "$inputbams"
@@ -56,14 +72,13 @@ else
 
 	# copy bad_bins_file to expected location if not already
 	if [ ! -f "$outputfolder/bad_bins_file.gz" ]; then
-		cp -vn "/lustre/scratch119/casm/team78pipelines/reference/human/GRCh37d5/scCNV/bad_bins.bed.gz" "$outputfolder/bad_bins_file.gz"
+		cp -vn "$badbins_path" "$outputfolder/bad_bins_file.gz"
 	fi
 
-	cytoband="$outputfolder/cytoband_hg19.txt.gz"
-	if [ ! -f "$cytoband" ]; then
-		cp -vn "/lustre/scratch119/realdata/mdt1/team78pipelines/canpipe/live/ref/Homo_sapiens/GRCH37d5/brass/cytoband_hg19.txt" "$outputfolder/cytoband_hg19.txt"
+	if [ ! -f "$outputfolder/cytoband.txt.gz" ]; then
+		cp -vn "$cytoband_path" "$outputfolder/cytoband.txt"
 		cd "$outputfolder"
-		gzip "cytoband_hg19.txt"
+		gzip "cytoband.txt"
 		cd -
 	fi
 
@@ -124,7 +139,6 @@ else
 	-B ${outputfolder}:/output \
 	$sccnv_singularity_image /code/perl/bin/scCNV.pl \
 		--sample_names_file /sample.list.txt \
-		--compress_chunk_size 10 \
 		--threads $threads \
 		--bamdir /data \
 		--outdir /output \
@@ -133,7 +147,7 @@ else
 		--gamma 15 \
 		--species $map_species \
 		--assembly $map_assembly \
-		--cytoband /output/cytoband_hg19.txt.gz \
+		--cytoband /output/cytoband.txt.gz \
 		--ploidy 2 \
 		--threshold 0.6 \
 		--bad_bins_file /output/bad_bins_file.gz \
